@@ -22,6 +22,8 @@ reload_source <- function(){
     
     if (!require('lubridate')) install.packages('lubridate'); library('lubridate')
     if (!require('RColorBrewer')) install.packages('RColorBrewer'); library('RColorBrewer')
+
+    if (!require('lubridate')) install.packages('lubridate'); library('lubridate')
     
     
     

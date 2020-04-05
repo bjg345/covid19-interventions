@@ -163,19 +163,26 @@ server <- function(input, output,session) {
                                              "status: ",status,"\n",
                                              "subpopulation: ",subpopulation,"\n",
                                              "required:",required,"\n",
-                                             "enforcement:",enforcement))
+                                             "enforcement:",enforcement)) %>%
+            filter(admin1 %in% input$admin_unit)
+        tmp$subpopulation[which(tmp$subpopulation != 'entire population')] <- 'not entire population'
             
-        gg <- ggplot(data = tmp %>% filter(admin1 %in% input$admin_unit),
+        gg <- ggplot(data = tmp,
                aes(x = date_of_update, y = intervention_clean,
-                   shape = status_simp, 
-                   color = national_entry)) +
+                   color = status_simp, shape = national_entry, alpha = subpopulation)) +
+                    scale_alpha_manual(values=c('entire population'=1, 'not entire population' = .25)) +
+            scale_color_manual(values=c('closed/restricted/all/yes'="red",'partially closed/partially restricted/\nrecommended/some'=
+                                            "yellow",'open/no/no policy'= "green")) +
                 geom_point_interactive(aes(tooltip = tooltip,
-                                           data_id = record_id),size=3)+
-            #geom_point(size = 3) + 
+                                           data_id = record_id),size=8)+
             xlab("Date of policy change") + 
-            ylab("") + theme(legend.position="bottom") + theme_bw() + labs(color="National Policy?",shape="Policy Status")
+            ylab("") + theme(legend.position="bottom") + labs(color="Policy Status",shape="National Policy?",
+                                                              stroke='Subpopulation?')+
+            theme(text=element_text(size=20))#, axis.text.x = element_text(angle=90)) +
+            #scale_x_discrete(position = "top") +
+            #scale_y_reverse(labels = function(x) as_date(x))
         
-            girafe(ggobj = gg,width_svg = 12)
+            girafe(ggobj = gg, width_svg = 20, height_svg =20)
 
     })
     
