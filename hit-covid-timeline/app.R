@@ -178,7 +178,7 @@ server <- function(input, output,session) {
             xlab("Date of policy change") + 
             ylab("") + theme(legend.position="bottom") + labs(color="Policy Status",shape="National Policy?",
                                                               stroke='Subpopulation?')+
-            theme(text=element_text(size=20))#, axis.text.x = element_text(angle=90)) +
+            theme(text=element_text(size=20, family = 'CM Roman'))#, axis.text.x = element_text(angle=90)) +
             #scale_x_discrete(position = "top") +
             #scale_y_reverse(labels = function(x) as_date(x))
         
