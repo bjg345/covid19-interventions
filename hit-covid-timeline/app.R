@@ -246,6 +246,7 @@ server <- function(input, output,session) {
         ## creating tool tips for hover
         ## can make this nicer later
 
+
         tmp <- tmp %>%
             mutate(tooltip=paste0("record id: ",record_id,"\n",
                                   "date: ",date_of_update,"\n",
