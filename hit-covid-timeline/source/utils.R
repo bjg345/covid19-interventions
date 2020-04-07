@@ -18,12 +18,13 @@ reload_source <- function(){
     if (!require('sf')) install.packages('sf'); library('sf')
     if (!require('sp')) install.packages('sp'); library('sp')
     if (!require('leaflet')) install.packages('leaflet'); library('leaflet')
-    if (!require('geojsonio')) install.packages('geojsonio'); library('geojsonio')
+    #if (!require('geojsonio')) install.packages('geojsonio'); library('geojsonio')
     
     if (!require('lubridate')) install.packages('lubridate'); library('lubridate')
     if (!require('RColorBrewer')) install.packages('RColorBrewer'); library('RColorBrewer')
 
-    if (!require('lubridate')) install.packages('lubridate'); library('lubridate')
+    if (!require('knitr')) install.packages('knitr'); library('knitr')
+
     
     
     
@@ -68,14 +69,38 @@ pull_data <- function(api_path = "private/api_token.txt",
 #' @param long_file_path path to where the std long file is saved
 #' csv file
 get_long_data <- function(fresh_pull=FALSE,
-                          long_file_path="generated_data/survey_data_long.csv"){
+                          long_file_path="generated_data/survey_data_long.csv",
+                          ...){
     
     if(fresh_pull){
-        source("source/Survey_Long.R")
+        cat(sprintf("pulling data from API \n"))
+        source("source/utils.R")
+        reload_source()
+        source("source/data_cleaning_functions.R")
+        data <- pull_data()
+        
+        # cleaning
+        dataL_clean <- create_long(data, error_window = 2,...)
+        
+        cat(sprintf("Saving long file at %s \n",long_file_path))
+        write.csv(dataL_clean, long_file_path, row.names = FALSE)
     } 
     
     rc <- tryCatch({
-        read_csv(long_file_path)
+        read_csv(long_file_path,
+                 col_types = cols(
+            record_id = col_double(),
+            geography_and_intro_timestamp = col_datetime(format = ""),
+            admin_1_unit_and_updates_timestamp = col_datetime(format = ""),
+            timestamp = col_datetime(format = ""),
+            t_original = col_date(format = ""),
+            size = col_double(),
+            duration = col_double(),
+            date_flag = col_logical(),
+            date_error = col_logical(),
+            t = col_date(format = "")
+        )
+        )
         },
         error=function(x){
          message(sprintf("file %s doesn't seem to exist \n",long_file_path))
@@ -87,23 +112,25 @@ get_long_data <- function(fresh_pull=FALSE,
 }
 
 
-#' Function to clean dates
-#' returns column t with clean date and t_original with original date
-#' @param data Long version of dataset with column name 't'
-#' 
-clean_dates <- function(data){
-    data <- data %>%
-        rename(t_original = t) %>%
-        mutate(t_month = month(t_original),
-               t_day = day(t_original),
-               t_year = year(t_original),
-               t_new = as.character(make_date(year = t_year,
-                                                  month = t_month - 1,
-                                                  day = t_day)),
-               t_old = as.character(t_original),
-               t = as.POSIXct(ifelse(!is.na(date_flag) & date_flag == TRUE,
-                                             t_new, t_old))) %>%
-        select(-t_day, -t_year, -t_month, -t_old, -t_new)
-    return(data)
+#' takes national observations and propagates them
+#' to all children for visuralization purposes
+#' note: this does not do anything to specify if local policy trumps national policy
+#' @param fresh_pull generate directly from server?
+#' @param long_file_path path to where the std long file is saved
+#' csv file
+propagate_down_national <- function(long_data,
+                                    lookup_loc="geo_lookup.csv"){
+    
+    geo <- read_csv(lookup_loc)
+    
+    nationals <- long_data %>% filter(national_entry=="Yes")
+    
+    ## filling out national entry to all children
+    filled_out <- left_join(nationals,geo %>% rename(country=admin0)) %>% data.frame
+    
+    rc <- bind_rows(long_data %>% filter(national_entry=="No"),filled_out)
+    
+    return(rc)
 }
+
 

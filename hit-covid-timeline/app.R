@@ -1,4 +1,5 @@
 ## load functions and source packages
+library(shinydashboard)
 source("source/utils.R")
 reload_source()
 
@@ -11,75 +12,135 @@ admin_names <- setNames(admin_lookup$GID_1,nm =admin_lookup$NAME_1 ) %>% na.omit
 interven_names <- read_csv("intervention_lookup.csv")
 
 ## set up data
-long_data <- get_long_data(fresh_pull = FALSE,long_file_path = "generated_data/survey_data_long.csv")
+long_data <- get_long_data(fresh_pull = FALSE,long_file_path = "generated_data/survey_data_long.csv",remove_names=TRUE)
 last_updated_time <- file.info("generated_data/survey_data_long.csv")$mtime
 
 interven_df_plot <- long_data   %>% 
     filter(complete == "Complete") %>% 
     #Adding cleaned intervention names
-    left_join(interven_names, by = "intervention_specific") %>%
+    left_join(interven_names, by = c("intervention_specific", "intervention")) %>%
     select(record_id, entry_time = geography_and_intro_timestamp,
            national_entry, country, country_name, admin1 = adm1, admin1_name,
-           locality = adm_lowest, intervention_clean,
+           locality = adm_lowest, intervention_specific_clean,
            date_of_update = t, status, subpopulation = pop,
-           required, enforcement, details) %>%
-    mutate(status_simp = ifelse(status %in% c("closed", "fully closed",
-                                              "fully restricted", "all",
-                                              "required", "yes"), 3,
-                                ifelse(status %in% c("partially closed", "partially restricted",
-                                                     "recommended", "some"), 2,
-                                       ifelse(status %in% c("open", "no", "no policy"), 1, status))),
+           required, enforcement, size, duration, test_pop, details) %>%
+    mutate(status_simp = ifelse(status %in% c("all",
+                                              "closed",
+                                              "complete contact tracing",
+                                              "fully restricted",
+                                              "required",
+                                              "yes"), 1,
+                                ifelse(status %in% c("partial contact tracing",
+                                                     "partially closed",
+                                                     "partially restricted",
+                                                     "recommended",
+                                                     "some"), 2,
+                                       ifelse(status %in% c("open",
+                                                            "no",
+                                                            "no policy",
+                                                            "none",
+                                                            "unrestricted"), 3, status))),
            status_simp = factor(status_simp, levels = c(1, 2, 3),
-                                labels = c("open/no/no policy",
-                                           "partially closed/partially restricted/\nrecommended/some",
-                                           "closed/restricted/all/yes")))
+                                labels = c("Strongly Implemented",
+                                           "Partially Implemented",
+                                           "Not Implemented")),
+           # Making new requirement metric
+           required_new = ifelse(intervention_specific_clean %in% c("Limiting size of gatherings",
+                                                       "Symptom screening when entering by land")
+                             & is.na(required), "unknown",
+                             ifelse(is.na(required), "required", required)),
+           intervention_f = factor(intervention_specific_clean))
 
 
 # Define UI for application that draws a histogram
-ui <- fluidPage(
 
-    # Application title
-    titlePanel(sprintf("HIT-COVID Data Viewer (last updated %s)",last_updated_time)),
+ui <- dashboardPage(
+    dashboardHeader(title = "HIT-COVID Data Viewer"),
+    dashboardSidebar(            
+        #h3("Choose a location:", style = sprintf("color:%s", "steelblue")),
+                                 selectInput("country_select",label = "Select a country:",choices = country_names,selectize = TRUE),
+                                 selectInput("admin_unit",label = "Select an admin1 unit:",choices = admin_names,selectize = TRUE),
+                                 checkboxInput("include_national", label ="Include National Interventions?", value = TRUE, width = NULL),
+                                 br(),
+                                 downloadButton("download_data", label = "Download Current Data")
+    ),
+    dashboardBody(
+        tabsetPanel(
+            tabPanel("Overview",
+                     br(),
+                     #h3("Background"),
+                     #h4("As the COVID-19 pandemic unfolds, massive government efforts are being made globally to try to reduce morbidity and mortality. Governments have taken a large range of actions, from broad-scale social distancing such as the forced lockdown of cities with mandatory home confinement, to behavior change campaigns to improve hand hygiene. Moreover, governments have implemented these measures at different points in time during the course of their epidemic."),
+                     #h4("Major government mandated actions come with huge economic risks and many are asking if some of the most drastic actions are worth it. In order to start to understand how different public health policy interventions may have influenced COVID-19 transmission across the globe, we need detailed data on when and where specific policy interventions have been enacted over the course of this epidemic. The goal of this project is to provide a comprehensive database of public health policy at the first level administrative unit, to serve as a key component of assessments of the impact of these policies on COVID transmission dynamics and other changes in the health of affected populations. This living database will be maintained throughout the course of the pandemic with visual summaries of raw data made available publicly. "),
+                     #h3("Progress"),
+                     h4(sprintf("last update: %s" ,last_updated_time)),
+                     h4(sprintf("%.0f interventions logged",nrow(interven_df_plot))),
+                     h4(sprintf("%.0f countries covered",n_distinct(interven_df_plot$country))),
+                     br(),
+                     leafletOutput("simp_map"),
+                     h4("Figure. Overview of recent updates")
+                     #plotOutput('recordHeatmap')
+            ),
+            tabPanel("Timeline",
+                     br(),
+                     girafeOutput("timeline"),
+                     p("Below is a table of all the data to explore:"),
+                     dataTableOutput("overview_tab"),
+                     includeMarkdown("include/heading_box.md"),
+            )
+        ))
+    )
 
-    # Sidebar with a slider input for number of bins 
-    sidebarLayout(
-        sidebarPanel(
-            h2("Choose a location:", style = sprintf("color:%s", "steelblue")),
-            selectInput("country_select",label = "Select a country:",choices = country_names,selectize = TRUE),
-            selectInput("admin_unit",label = "Select an admin1 unit:",choices = admin_names,selectize = TRUE),
-             checkboxInput("include_national", label ="Include National Interventions?", value = TRUE, width = NULL),
-            br(),
-            downloadButton("download_data", label = "Download Current Data")
-        ),
 
-        # Show a plot of the generated distribution
-        mainPanel(
-            tabsetPanel(
-                tabPanel("Overview",
-                         br(),
-                         h2("Welcome to the Health Intervention Tracking for COVID-19 Application"),
-                         h3("Background"),
-                         h4("As the COVID-19 pandemic unfolds, massive government efforts are being made globally to try to reduce morbidity and mortality. Governments have taken a large range of actions, from broad-scale social distancing such as the forced lockdown of cities with mandatory home confinement, to behavior change campaigns to improve hand hygiene. Moreover, governments have implemented these measures at different points in time during the course of their epidemic."),
-                         h4("Major government mandated actions come with huge economic risks and many are asking if some of the most drastic actions are worth it. In order to start to understand how different public health policy interventions may have influenced COVID-19 transmission across the globe, we need detailed data on when and where specific policy interventions have been enacted over the course of this epidemic. The goal of this project is to provide a comprehensive database of public health policy at the first level administrative unit, to serve as a key component of assessments of the impact of these policies on COVID transmission dynamics and other changes in the health of affected populations. This living database will be maintained throughout the course of the pandemic with visual summaries of raw data made available publicly. "),
-                         h3("Progress"),
-                         h4(sprintf("%.0f interventions logged",nrow(interven_df_plot))),
-                         h4(sprintf("%.0f countries covered",n_distinct(interven_df_plot$country))),
-                         br(),
-                         h4("Figure. Overview of recent updates"),
-                         leafletOutput("simp_map")
-                         #plotOutput('recordHeatmap')
-                    ),
-                tabPanel("Timeline",
-            includeMarkdown("include/heading_box.md"),
-            br(),
-            girafeOutput("timeline"),
-            p("Below is a table of all the data to explore:"),
-            dataTableOutput("overview_tab")
-                ),
-            tabPanel("Maps",
-                     p("More to come soon")
-                     )
-            ))))
+# ui <- fluidPage(
+# 
+#     # Application title
+#     titlePanel(sprintf("Health Intervention Tracking for COVID-19 Data Viewer (last updated %s)",last_updated_time)),
+# 
+#     # Sidebar with a slider input for number of bins 
+#     sidebarLayout(
+#         sidebarPanel(
+#             width = 3, 
+#             div(style = "font-size: 8px;", 
+#                 sliderInput(inputId = "groups", 
+#                             label = "No. of Groups",
+#                             value = 4, min = 2, max = 12)
+#             ),  
+#             tags$style(tableHTML::make_css(list('.well', 'border-width', '0px'))),
+#             h2("Choose a location:", style = sprintf("color:%s", "steelblue")),
+#             selectInput("country_select",label = "Select a country:",choices = country_names,selectize = TRUE),
+#             selectInput("admin_unit",label = "Select an admin1 unit:",choices = admin_names,selectize = TRUE),
+#              checkboxInput("include_national", label ="Include National Interventions?", value = TRUE, width = NULL),
+#             br(),
+#             downloadButton("download_data", label = "Download Current Data")
+#         ),
+# 
+#         # Show a plot of the generated distribution
+#         mainPanel(
+#             tabsetPanel(
+#                 tabPanel("Overview",
+#                          br(),
+#                          #h3("Background"),
+#                          #h4("As the COVID-19 pandemic unfolds, massive government efforts are being made globally to try to reduce morbidity and mortality. Governments have taken a large range of actions, from broad-scale social distancing such as the forced lockdown of cities with mandatory home confinement, to behavior change campaigns to improve hand hygiene. Moreover, governments have implemented these measures at different points in time during the course of their epidemic."),
+#                          #h4("Major government mandated actions come with huge economic risks and many are asking if some of the most drastic actions are worth it. In order to start to understand how different public health policy interventions may have influenced COVID-19 transmission across the globe, we need detailed data on when and where specific policy interventions have been enacted over the course of this epidemic. The goal of this project is to provide a comprehensive database of public health policy at the first level administrative unit, to serve as a key component of assessments of the impact of these policies on COVID transmission dynamics and other changes in the health of affected populations. This living database will be maintained throughout the course of the pandemic with visual summaries of raw data made available publicly. "),
+#                          #h3("Progress"),
+#                          h4(sprintf("%.0f interventions logged",nrow(interven_df_plot))),
+#                          h4(sprintf("%.0f countries covered",n_distinct(interven_df_plot$country))),
+#                          br(),
+#                          leafletOutput("simp_map"),
+#                          h4("Figure. Overview of recent updates")
+#                          #plotOutput('recordHeatmap')
+#                     ),
+#                 tabPanel("Timeline",
+#             includeMarkdown("include/heading_box.md"),
+#             br(),
+#             girafeOutput("timeline"),
+#             p("Below is a table of all the data to explore:"),
+#             dataTableOutput("overview_tab")
+#                 ),
+#             tabPanel("Maps",
+#                      p("More to come soon")
+#                      )
+#             ))))
 
 # Define server logic required to draw a histogram
 server <- function(input, output,session) {
@@ -124,10 +185,21 @@ server <- function(input, output,session) {
         updateSelectInput(session,"admin_unit", choices = choices) 
     })
     
+    # spreadsheet of data to scroll through
     output$overview_tab <- renderDT(
         interven_df_plot   %>% 
-            filter(country == input$country_select) %>%
-            select(-national_entry, -status_simp, -country, -admin1) %>%
+            #include only the admin1 level area selected
+            filter(admin1 %in% input$admin_unit) %>%
+            #include national interventions if selected
+            rbind({
+                if(input$include_national){
+                    filter(interven_df_plot,
+                           country == input$country_select &
+                               is.na(admin1))
+                } else data.frame() #empty data.frame
+            }) %>%
+            select(-national_entry, -status_simp, -required_new,
+                   -country, -admin1, intervention_f) %>%
             arrange(admin1_name),
         class = "display nowrap compact", # style
         filter = "top", # location of column filters,
@@ -136,6 +208,22 @@ server <- function(input, output,session) {
         )
         
     )
+    
+    
+    #old overview tab april 6, 2020
+    # output$overview_tab <- renderDT(
+    #     interven_df_plot   %>% 
+    #         filter(country == input$country_select) %>%
+    #         select(-national_entry, -status_simp, -required_new,
+    #                -country, -admin1, intervention_f) %>%
+    #         arrange(admin1_name),
+    #     class = "display nowrap compact", # style
+    #     filter = "top", # location of column filters,
+    #     options = list(  # options
+    #         scrollX = TRUE # allow user to scroll wide tables horizontally
+    #     )
+    #     
+    # )
     
     ## make timeline plot
     output$timeline <- renderGirafe({
@@ -146,7 +234,7 @@ server <- function(input, output,session) {
             # figure out which country
             # get national level data and create fake obs for this admin unit
             cntry <- admin_lookup %>% dplyr::filter(GID_1==input$admin_unit) %>% select(admin0) %>% unlist %>% first
-
+            
             national_ints <- tmp %>% dplyr::filter(national_entry=="Yes" & country==cntry) %>% 
                 mutate(admin1 = input$admin_unit)
             
@@ -157,6 +245,7 @@ server <- function(input, output,session) {
         
         ## creating tool tips for hover
         ## can make this nicer later
+
         tmp <- tmp %>% mutate(tooltip=paste0("record id: ",record_id,"\n",
                                              "date: ",date_of_update,"\n",
                                              "intervention: ",intervention_clean,"\n",
