@@ -246,46 +246,33 @@ server <- function(input, output,session) {
         ## creating tool tips for hover
         ## can make this nicer later
 
-        tmp <- tmp %>%
-            mutate(tooltip=paste0("record id: ",record_id,"\n",
-                                  "date: ",date_of_update,"\n",
-                                  "intervention: ",intervention_specific_clean,"\n",
-                                  "status: ",status,"\n",
-                                  "subpopulation: ",subpopulation,"\n",
-                                  "required: ",required,"\n",
-                                  "enforcement: ",enforcement,"\n",
-                                  "size: ", size)) %>%
-            filter(admin1 %in% input$admin_unit) %>%
-            mutate(subpopulation = ifelse(subpopulation == "entire population", 
-                                          "Entire Population",
-                                          ifelse(!is.na(subpopulation), "Not Entire Population",
-                                                 NA)))
-        
+
+        tmp <- tmp %>% mutate(tooltip=paste0("record id: ",record_id,"\n",
+                                             "date: ",date_of_update,"\n",
+                                             "intervention: ",intervention_clean,"\n",
+                                             "status: ",status,"\n",
+                                             "subpopulation: ",subpopulation,"\n",
+                                             "required:",required,"\n",
+                                             "enforcement:",enforcement)) %>%
+            filter(admin1 %in% input$admin_unit)
+        tmp$subpopulation[which(tmp$subpopulation != 'entire population')] <- 'not entire population'
+            
         gg <- ggplot(data = tmp,
-                     aes(x = date_of_update, y = intervention_f,
-                         color = status_simp, shape = national_entry,
-                         alpha = subpopulation)) +
-            scale_y_discrete(drop=FALSE) +
-            scale_alpha_manual(values=c('Entire Population' = 1, 'Not Entire Population' = .4)) +
-            scale_color_manual(values=c('Strongly Implemented'="red",'Partially Implemented'=
-                                            "yellow", 'Not Implemented'= "green")) +
-            geom_point_interactive(aes(tooltip = tooltip, data_id = record_id), size = 8) +
-            theme_bw() +
-            theme(legend.position="bottom",
-                  legend.box = "vertical") + 
-            labs(y = "",
-                 x = "Date of Policy Change",
-                 color="Policy Status",
-                 shape="National Policy?",
-                 alpha="Subpopulation") +
-            guides(color = guide_legend(order = 1),
-                   alpha = guide_legend(order = 2),
-                   shape = guide_legend(order = 3)) +
-        theme(text = element_text(size=20))#, axis.text.x = element_text(angle=90)) +
-        #scale_x_discrete(position = "top") +
-        #scale_y_reverse(labels = function(x) as_date(x))
+               aes(x = date_of_update, y = intervention_clean,
+                   color = status_simp, shape = national_entry, alpha = subpopulation)) +
+                    scale_alpha_manual(values=c('entire population'=1, 'not entire population' = .25)) +
+            scale_color_manual(values=c('closed/restricted/all/yes'="red",'partially closed/partially restricted/\nrecommended/some'=
+                                            "yellow",'open/no/no policy'= "green")) +
+                geom_point_interactive(aes(tooltip = tooltip,
+                                           data_id = record_id),size=8)+
+            xlab("Date of policy change") + 
+            ylab("") + theme(legend.position="bottom") + labs(color="Policy Status",shape="National Policy?",
+                                                              stroke='Subpopulation?')+
+            theme(text=element_text(size=20, family = 'CM Roman'))#, axis.text.x = element_text(angle=90)) +
+            #scale_x_discrete(position = "top") +
+            #scale_y_reverse(labels = function(x) as_date(x))
         
-        girafe(ggobj = gg, width_svg = 20, height_svg =20)
+            girafe(ggobj = gg, width_svg = 20, height_svg =20)
 
 
     })
